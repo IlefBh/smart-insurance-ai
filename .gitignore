@@ -1,0 +1,60 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+build/
+dist/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+ENV/
+env/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# IDE / OS
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# Env files / secrets
+# =========================
+.env
+
+# =========================
+# Data (keep folders, ignore contents)
+# =========================
+data/raw/*
+data/processed/*
+data/external/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/external/.gitkeep
+
+# =========================
+# Model artifacts (keep folders, ignore contents)
+# =========================
+artifacts/*
+!artifacts/sklearn/.gitkeep
+!artifacts/torch/.gitkeep
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
