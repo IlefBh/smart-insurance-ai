@@ -35,7 +35,8 @@ class Offer(BaseModel):
     plafond_tnd: float
     franchise_tnd: float
     prime_annuelle_tnd: float
-    breakdown: Dict[str, float] = {}
+    breakdown: Dict[str, float] = Field(default_factory=dict)   # numérique only
+    explain: Dict[str, Any] = Field(default_factory=dict)       # texte/labels/audit
 
 
 class QuoteResponse(BaseModel):

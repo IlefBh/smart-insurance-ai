@@ -1,6 +1,6 @@
 # src/pricing/rules.py
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from .templates import ProductTemplate, TEMPLATES
 
@@ -13,21 +13,23 @@ class SelectionDecision:
 
 
 def _eligible(t: ProductTemplate, profile: Dict) -> bool:
-    # activity check
+    activity = (profile.get("activity_type") or "").lower()
+    open_at_night = bool(profile.get("open_at_night", False))
+    assets = float(profile.get("assets_value_tnd", 0.0) or 0.0)
+
     if t.activity_in is not None:
-        if profile.get("activity_type") not in t.activity_in:
+        allowed = [a.lower() for a in t.activity_in]
+        if activity not in allowed:
             return False
 
-    # night check
     if t.open_at_night_required is not None:
-        if bool(profile.get("open_at_night")) != bool(t.open_at_night_required):
+        if open_at_night != bool(t.open_at_night_required):
             return False
 
-    assets = float(profile.get("assets_value_tnd", 0) or 0)
-
-    if t.assets_min_tnd is not None and assets < t.assets_min_tnd:
+    if t.assets_min_tnd is not None and assets < float(t.assets_min_tnd):
         return False
-    if t.assets_max_tnd is not None and assets > t.assets_max_tnd:
+
+    if t.assets_max_tnd is not None and assets > float(t.assets_max_tnd):
         return False
 
     return True
@@ -35,53 +37,72 @@ def _eligible(t: ProductTemplate, profile: Dict) -> bool:
 
 def select_template(profile: Dict, risk: Dict) -> SelectionDecision:
     """
-    Deterministic selection:
-    - Build eligible candidates
-    - Score them using risk signals (p_claim, uncertainty) and profile patterns
-    - Return chosen template + reason codes
+    Deterministic selection.
+    Uses: open_at_night, activity/assets exposure, ML outputs (p_claim, uncertainty)
+    plus optional segmentation hint:
+        risk["cluster_hint_template_id"] in {"T1_ESS","T2_PLUS","T3_NIGHT"}
     """
-    candidates = [tid for tid, t in TEMPLATES.items() if _eligible(t, profile)]
     reasons: List[str] = []
+    candidates: List[str] = []
 
-    # fallback if none (shouldn't happen in MVP)
+    for tid, t in TEMPLATES.items():
+        if _eligible(t, profile):
+            candidates.append(tid)
+
     if not candidates:
-        return SelectionDecision(template_id="T1_ESSENTIEL", reasons=["fallback_default"], candidates=["T1_ESSENTIEL"])
+        # Should never happen, but keep safe fallback
+        return SelectionDecision(template_id="T1_ESS", reasons=["fallback_no_candidate"], candidates=[])
+
+    # Base scoring
+    scores = {tid: 0.0 for tid in candidates}
+
+    open_at_night = bool(profile.get("open_at_night", False))
+    assets = float(profile.get("assets_value_tnd", 0.0) or 0.0)
+    activity = (profile.get("activity_type") or "").lower()
 
     p_claim = float(risk.get("p_claim", 0.0) or 0.0)
-    unc = risk.get("uncertainty_score", 0.0)
-    open_at_night = bool(profile.get("open_at_night"))
+    uncertainty = float(risk.get("uncertainty_score", 0.0) or 0.0)
 
-    # scoring: higher score means better fit
-    scores: Dict[str, float] = {tid: 0.0 for tid in candidates}
+    # 1) Segmentation hint (orientation only)
+    hint = risk.get("cluster_hint_template_id")
+    if hint in scores:
+        scores[hint] += 1.5
+        reasons.append(f"rule_cluster_profile_hint:{hint}")
 
-    for tid in candidates:
-        t = TEMPLATES[tid]
-        # base preference logic
-        if tid == "T3_NIGHT" and open_at_night:
-            scores[tid] += 2.0
-        if tid == "T2_PLUS" and profile.get("activity_type") in ["pharmacy", "electronics"]:
-            scores[tid] += 1.5
-        if tid == "T1_ESSENTIEL":
-            scores[tid] += 1.0
+    # 2) Night rule
+    if open_at_night and "T3_NIGHT" in scores:
+        scores["T3_NIGHT"] += 2.0
+        reasons.append("rule_open_at_night")
 
-        # risk-aware nudges
-        if p_claim > 0.15 and tid == "T3_NIGHT":
-            scores[tid] += 1.0
-        if unc and unc > 0.6:
-            # if uncertainty high, prefer templates with stricter underwriting (often night/cash)
-            if tid in ["T3_NIGHT", "T2_PLUS"]:
-                scores[tid] += 0.5
+    # 3) High exposure rule (assets/activity)
+    high_value_activity = any(k in activity for k in ["pharm", "electron", "bijou", "jewel"])
+    if (assets >= 80000 or high_value_activity) and "T2_PLUS" in scores:
+        scores["T2_PLUS"] += 1.5
+        reasons.append("rule_high_exposure_assets_or_activity")
+
+    # 4) Frequency / uncertainty nudges (still deterministic)
+    if p_claim > 0.15:
+        # prefer more protective templates if eligible
+        if "T2_PLUS" in scores:
+            scores["T2_PLUS"] += 0.4
+        if "T3_NIGHT" in scores:
+            scores["T3_NIGHT"] += 0.4
+        reasons.append("rule_high_frequency")
+
+    if uncertainty > 0.7:
+        # uncertainty -> prefer simpler base product unless night required
+        if "T1_ESS" in scores:
+            scores["T1_ESS"] += 0.3
+        reasons.append("rule_high_uncertainty")
 
     chosen = max(scores.items(), key=lambda x: x[1])[0]
 
-    # reason codes for explainability
+    # Add final summary reason for chosen
     if chosen == "T3_NIGHT":
-        reasons.append("rule_open_at_night")
-        if p_claim > 0.15:
-            reasons.append("rule_high_frequency")
+        reasons.append("chosen_night_template")
     elif chosen == "T2_PLUS":
-        reasons.append("rule_activity_high_value")
+        reasons.append("chosen_plus_template")
     else:
-        reasons.append("rule_default_essential")
+        reasons.append("chosen_essential_template")
 
     return SelectionDecision(template_id=chosen, reasons=reasons, candidates=candidates)
