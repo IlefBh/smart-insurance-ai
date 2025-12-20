@@ -1,0 +1,25 @@
+{
+  "model": "DeepONetUncertainty",
+  "x_dim": 21,
+  "t_dim": 2,
+  "features_num": [
+    "density_per_km2",
+    "poi_per_km2",
+    "years_active",
+    "shop_area_m2",
+    "assets_value_tnd",
+    "revenue_monthly_tnd"
+  ],
+  "features_cat": [
+    "governorate",
+    "activity_type"
+  ],
+  "features_bool": [
+    "open_at_night",
+    "security_alarm",
+    "security_camera",
+    "fire_extinguisher"
+  ],
+  "target_definition": "group volatility: 0.70*std(log1p(cost)) + 0.30*p*(1-p), normalized",
+  "data_path": "data\\processed\\business_df_with_governorate.csv"
+}

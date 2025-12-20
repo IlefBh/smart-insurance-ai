@@ -12,39 +12,41 @@ from src.pricing.rules import select_template
 from src.pricing.engine import build_offer
 
 from src.models.uncertainty_service import UncertaintyService
+from src.models.frequency_service import FrequencyService
+from src.models.geo_proxies import GeoProxies
 
+
+
+SECURITY_MAP = {
+    "has_alarm": "security_alarm",
+    "has_camera": "security_camera",
+    "has_extinguisher": "fire_extinguisher",
+}
 
 def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
-    """
-    API schema -> pricing schema expected by rules/engine.
-    This is the only translation layer, so schema changes remain localized.
-    """
     r = req.model_dump()
+
     sec = r.get("security") or {}
+    gov = r.get("governorate")
+    density, poi = GeoProxies().get(str(gov))
 
     profile: Dict[str, Any] = {
-        "governorate": r.get("governorate"),
-        "activity_type": r.get("activity_type"),
+        "governorate": (r.get("governorate") or "").strip(),
+        "activity_type": (r.get("activity_type") or "").strip(),
         "shop_area_m2": r.get("shop_area_m2"),
         "years_active": r.get("years_active"),
         "assets_value_tnd": r.get("assets_value_tnd"),
-
-        # revenue numeric only (bucket removed by design)
-        "revenue_monthly_tnd": float(r.get("revenue_monthly_tnd") or 0.0),
-
-        "open_at_night": bool(r.get("open_at_night", False)),
-
-        # expected by pricing/engine.py
-        "security_alarm": bool(sec.get("has_alarm", False)),
-        "security_camera": bool(sec.get("has_camera", False)),
-        "fire_extinguisher": bool(sec.get("has_extinguisher", False)),
-
-        # engine expects budget_max_tnd (spec). API currently uses budget_constraint_tnd.
-        "budget_max_tnd": r.get("budget_constraint_tnd"),
+        "revenue_monthly_tnd": r.get("revenue_monthly_tnd"),
+        "open_at_night": r.get("open_at_night"),
+        "density_per_km2": density,
+        "poi_per_km2": poi,
     }
 
-    return profile
+    # IMPORTANT: map API security keys to training feature names
+    for api_key, feat_key in SECURITY_MAP.items():
+        profile[feat_key] = sec.get(api_key)
 
+    return profile
 
 def _stub_risk_estimates(profile: Dict[str, Any]) -> Dict[str, float]:
     """
@@ -90,6 +92,15 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
 
     # Proxies for now (models 2 & 3 later)
     risk = _stub_risk_estimates(profile)
+    # Model 2 (Frequency) - calibrated, never pricing
+    try:
+        p_claim_ml = FrequencyService().predict(profile)
+        risk["p_claim"] = float(p_claim_ml)
+        freq_reason = "frequency_model:logreg_calibrated_v1"
+    except FileNotFoundError:
+        # fallback safe
+        freq_reason = "frequency_model:fallback_stub"
+
 
     # Model 4 (DeepONet) - uncertainty only, never pricing
     unc = UncertaintyService().predict(profile)
@@ -106,6 +117,7 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
 
     # Add explanation codes (audit-friendly)
     extra_reasons = [
+         freq_reason,
         "uncertainty_model:deeponet_v1",
         f"uncertainty_band:{unc.uncertainty_band}",
     ]

@@ -45,13 +45,6 @@ data/external/*
 !data/external/.gitkeep
 
 # =========================
-# Model artifacts (keep folders, ignore contents)
-# =========================
-artifacts/*
-!artifacts/sklearn/.gitkeep
-!artifacts/torch/.gitkeep
-
-# =========================
 # Logs
 # =========================
 logs/
