@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="Smart Insurance AI",
+    page_title="سالمة",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -115,6 +115,5 @@ st.markdown(
 
 
 
-st.title("Smart Insurance AI")
-st.caption("Micro-assurance inclusive pour petits commerçants (Tunisie)")
-st.sidebar.write("Utilise le menu Pages : Assuré / Assureur.")
+st.title("سالمة")
+st.caption("« Parce que votre travail mérite d’être protégé. »")

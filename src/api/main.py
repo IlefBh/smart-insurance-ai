@@ -11,7 +11,7 @@ from src.pricing.service import compute_quote
 
 load_dotenv()
 
-app = FastAPI(title="Smart Insurance AI API", version="0.1.0")
+app = FastAPI(title="سالمة API", version="0.1.0")
 
 # DB init
 Base.metadata.create_all(bind=engine)

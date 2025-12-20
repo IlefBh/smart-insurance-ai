@@ -1,4 +1,4 @@
-# Smart Insurance AI
+# سالمة
 
 AI-powered smart insurance platform for inclusive micro-insurance.  
 We combine classical ML (frequency & severity) with a DeepONet-based uncertainty module to support personalized product configuration, transparent pricing, and underwriting decisions.

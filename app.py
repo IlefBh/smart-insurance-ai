@@ -2,7 +2,7 @@ import streamlit as st
 
 # ✅ MUST be the first Streamlit call in the file
 st.set_page_config(
-    page_title="Smart Insurance AI",
+    page_title="سالمة",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -85,7 +85,7 @@ def build_mock_quote(profile):
     }
 
 # ------------------ UI ------------------
-st.title("🛡️ Smart Insurance AI")
+st.title("🛡️ سالمة")
 st.caption("Frontend only (mock) — Micro-assurance inclusive pour petits commerçants (Tunisie)")
 
 # Sidebar
