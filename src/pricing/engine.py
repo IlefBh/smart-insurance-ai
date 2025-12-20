@@ -15,7 +15,7 @@ class Offer:
     franchise_tnd: float
     prime_annuelle_tnd: float
 
-    bbreakdown: Dict[str, float]
+    breakdown: Dict[str, float]
     decision_reasons: List[str]
     flags: Dict[str, bool]
 

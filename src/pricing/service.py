@@ -11,18 +11,7 @@ from src.api.schemas import (
 from src.pricing.rules import select_template
 from src.pricing.engine import build_offer
 
-
-def revenue_to_bucket(revenue_monthly_tnd: float) -> str:
-    """
-    Simple, explainable thresholds (TND / month).
-    Adjust later if needed.
-    """
-    r = float(revenue_monthly_tnd or 0.0)
-    if r < 3000:
-        return "low"
-    if r <= 10000:
-        return "medium"
-    return "high"
+from src.models.uncertainty_service import UncertaintyService
 
 
 def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
@@ -33,10 +22,6 @@ def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
     r = req.model_dump()
     sec = r.get("security") or {}
 
-    # NEW: derive bucket internally from revenue_monthly_tnd
-    revenue_monthly_tnd = float(r.get("revenue_monthly_tnd") or 0.0)
-    derived_bucket = revenue_to_bucket(revenue_monthly_tnd)
-
     profile: Dict[str, Any] = {
         "governorate": r.get("governorate"),
         "activity_type": r.get("activity_type"),
@@ -44,9 +29,8 @@ def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
         "years_active": r.get("years_active"),
         "assets_value_tnd": r.get("assets_value_tnd"),
 
-        # keep both: numeric for future ML, bucket for current rules/engine
-        "revenue_monthly_tnd": revenue_monthly_tnd,
-        "revenue_bucket": derived_bucket,
+        # revenue numeric only (bucket removed by design)
+        "revenue_monthly_tnd": float(r.get("revenue_monthly_tnd") or 0.0),
 
         "open_at_night": bool(r.get("open_at_night", False)),
 
@@ -68,13 +52,12 @@ def _stub_risk_estimates(profile: Dict[str, Any]) -> Dict[str, float]:
     Keys expected by rules/engine:
       - p_claim
       - expected_cost
-      - uncertainty_score
+    NOTE: uncertainty_score is provided by DeepONet (model 4), not a stub.
     """
     assets = float(profile.get("assets_value_tnd") or 0.0)
     open_at_night = bool(profile.get("open_at_night"))
     alarm = bool(profile.get("security_alarm"))
     camera = bool(profile.get("security_camera"))
-    years_active = int(profile.get("years_active") or 0)
 
     # Frequency proxy
     p_claim = 0.06
@@ -96,41 +79,49 @@ def _stub_risk_estimates(profile: Dict[str, Any]) -> Dict[str, float]:
     else:
         expected_cost = 4500.0
 
-    # Uncertainty proxy
-    uncertainty_score = 0.30
-    if years_active < 1:
-        uncertainty_score += 0.15
-
-    # still uses the derived bucket (works as before)
-    if profile.get("revenue_bucket") == "low":
-        uncertainty_score += 0.05
-
-    if open_at_night and not alarm:
-        uncertainty_score += 0.20
-    uncertainty_score = max(0.0, min(1.0, uncertainty_score))
-
     return {
         "p_claim": float(p_claim),
         "expected_cost": float(expected_cost),
-        "uncertainty_score": float(uncertainty_score),
     }
 
 
 def compute_quote(req: QuoteRequest) -> QuoteResponse:
     profile = _normalize_profile(req)
 
-    # Later: replace by models outputs
+    # Proxies for now (models 2 & 3 later)
     risk = _stub_risk_estimates(profile)
 
+    # Model 4 (DeepONet) - uncertainty only, never pricing
+    unc = UncertaintyService().predict(profile)
+    risk["uncertainty_score"] = float(unc.uncertainty_score)
+    # audit trace
+    risk["uncertainty_band"] = unc.uncertainty_band
+
+    # Rule-based selection (deterministic)
     decision = select_template(profile, risk)
     risk["template_id"] = decision.template_id  # engine expects template_id in risk dict
 
+    # Actuarial pricing engine (deterministic)
     priced_offer = build_offer(profile, risk, decision.reasons)
+
+    # Add explanation codes (audit-friendly)
+    extra_reasons = [
+        "uncertainty_model:deeponet_v1",
+        f"uncertainty_band:{unc.uncertainty_band}",
+    ]
+
+    # Optionally enrich breakdown for traceability
+    # (safe even if UI ignores it)
+    try:
+        priced_offer.breakdown["uncertainty_score"] = float(unc.uncertainty_score)
+    except Exception:
+        # if breakdown is immutable in your Offer implementation, ignore
+        pass
 
     api_decision = ApiDecision(
         template_id=decision.template_id,
         candidates=decision.candidates,
-        reasons=decision.reasons + [f"derived_revenue_bucket:{profile['revenue_bucket']}"],
+        reasons=decision.reasons + extra_reasons,
     )
 
     api_offer = ApiOffer(
@@ -141,6 +132,10 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
         franchise_tnd=priced_offer.franchise_tnd,
         prime_annuelle_tnd=priced_offer.prime_annuelle_tnd,
         breakdown=priced_offer.breakdown,
+        explain={
+            "uncertainty_model": "deeponet_v1",
+            "uncertainty_band": unc.uncertainty_band,
+        },
     )
 
     return QuoteResponse(decision=api_decision, offer=api_offer)
