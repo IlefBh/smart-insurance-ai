@@ -12,6 +12,19 @@ from src.pricing.rules import select_template
 from src.pricing.engine import build_offer
 
 
+def revenue_to_bucket(revenue_monthly_tnd: float) -> str:
+    """
+    Simple, explainable thresholds (TND / month).
+    Adjust later if needed.
+    """
+    r = float(revenue_monthly_tnd or 0.0)
+    if r < 3000:
+        return "low"
+    if r <= 10000:
+        return "medium"
+    return "high"
+
+
 def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
     """
     API schema -> pricing schema expected by rules/engine.
@@ -20,22 +33,27 @@ def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
     r = req.model_dump()
     sec = r.get("security") or {}
 
+    # NEW: derive bucket internally from revenue_monthly_tnd
+    revenue_monthly_tnd = float(r.get("revenue_monthly_tnd") or 0.0)
+    derived_bucket = revenue_to_bucket(revenue_monthly_tnd)
+
     profile: Dict[str, Any] = {
         "governorate": r.get("governorate"),
         "activity_type": r.get("activity_type"),
         "shop_area_m2": r.get("shop_area_m2"),
         "years_active": r.get("years_active"),
         "assets_value_tnd": r.get("assets_value_tnd"),
-        "revenue_bucket": r.get("revenue_bucket"),
+
+        # keep both: numeric for future ML, bucket for current rules/engine
+        "revenue_monthly_tnd": revenue_monthly_tnd,
+        "revenue_bucket": derived_bucket,
+
         "open_at_night": bool(r.get("open_at_night", False)),
 
         # expected by pricing/engine.py
         "security_alarm": bool(sec.get("has_alarm", False)),
         "security_camera": bool(sec.get("has_camera", False)),
         "fire_extinguisher": bool(sec.get("has_extinguisher", False)),
-
-        # keep for future rules (not used in engine currently)
-        "security_guard": bool(sec.get("has_guard", False)),
 
         # engine expects budget_max_tnd (spec). API currently uses budget_constraint_tnd.
         "budget_max_tnd": r.get("budget_constraint_tnd"),
@@ -82,8 +100,11 @@ def _stub_risk_estimates(profile: Dict[str, Any]) -> Dict[str, float]:
     uncertainty_score = 0.30
     if years_active < 1:
         uncertainty_score += 0.15
+
+    # still uses the derived bucket (works as before)
     if profile.get("revenue_bucket") == "low":
         uncertainty_score += 0.05
+
     if open_at_night and not alarm:
         uncertainty_score += 0.20
     uncertainty_score = max(0.0, min(1.0, uncertainty_score))
@@ -109,7 +130,7 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
     api_decision = ApiDecision(
         template_id=decision.template_id,
         candidates=decision.candidates,
-        reasons=decision.reasons,
+        reasons=decision.reasons + [f"derived_revenue_bucket:{profile['revenue_bucket']}"],
     )
 
     api_offer = ApiOffer(

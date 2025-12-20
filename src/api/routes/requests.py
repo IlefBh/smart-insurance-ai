@@ -47,6 +47,13 @@ def generate_ai_offer(request_id: str, db: Session = Depends(get_db)):
 
     public = crud.orm_to_public(obj)
     payload = public["request"]
+
+    # Backward compatibility: old requests stored revenue_bucket
+    if "revenue_monthly_tnd" not in payload and "revenue_bucket" in payload:
+        b = payload["revenue_bucket"]
+        payload["revenue_monthly_tnd"] = 2000.0 if b == "low" else 6000.0 if b == "medium" else 15000.0
+        payload.pop("revenue_bucket", None)
+
     req = QuoteRequest(**payload)
 
     quote_resp = compute_quote(req)

@@ -1,6 +1,6 @@
 # src/pricing/engine.py
-from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, List
 
 from .templates import ProductTemplate, TEMPLATES
 

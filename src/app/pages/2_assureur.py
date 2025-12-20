@@ -3,6 +3,16 @@ import requests
 import streamlit as st
 import pandas as pd
 from dotenv import load_dotenv
+from src.common.ui import apply_branding, render_status
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT_DIR))
+
+
+apply_branding(show_top_header=False)
+
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
@@ -20,7 +30,7 @@ def api_post(path: str, payload=None):
     return r.json()
 
 
-def render_status_badge(status: str):
+def render_status(status: str):
     cls = {
         "PENDING": "status status-pending",
         "AI_PROPOSED": "status status-ai",
@@ -57,13 +67,14 @@ for r in rows:
             "Gouvernorat": req.get("governorate", ""),
             "Activité": req.get("activity_type", ""),
             "Actifs (TND)": req.get("assets_value_tnd", 0),
+            "Revenu/mois (TND)": req.get("revenue_monthly_tnd", 0),
             "Nuit": bool(req.get("open_at_night", False)),
         }
     )
 
+
 df = pd.DataFrame(table)
 
-st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Demandes à traiter")
 
 if df.empty:
@@ -77,13 +88,12 @@ st.markdown("</div>", unsafe_allow_html=True)
 selected_id = st.selectbox("Sélectionner une demande", df["ID"].tolist())
 detail = api_get(f"/requests/{selected_id}")
 
-st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Actions")
 
 c1, c2 = st.columns([2, 3])
 with c1:
     st.write("Statut :")
-    render_status_badge(detail.get("status", ""))
+    render_status(detail.get("status", ""))
 
 with c2:
     open_proc = st.button("Voir traitement", type="primary", use_container_width=True)
@@ -108,7 +118,7 @@ if open_proc:
         )
 
         st.write("Statut :")
-        render_status_badge(status)
+        render_status(status)
 
         st.divider()
         st.subheader("Formulaire (lecture seule)")

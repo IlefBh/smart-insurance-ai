@@ -1,8 +1,20 @@
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT_DIR))
+
 import os
 import requests
 import streamlit as st
 import pandas as pd
 from dotenv import load_dotenv
+from src.common.ui import apply_branding, render_status
+
+
+
+apply_branding(show_top_header=False)
+
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
@@ -23,8 +35,6 @@ ACTIVITY_TYPES = [
     ("other", "Autre"),
 ]
 
-REVENUE_BUCKETS = [("low", "Faible"), ("medium", "Moyen"), ("high", "Élevé")]
-
 
 # ---------------- API helpers ----------------
 def api_get(path: str):
@@ -40,7 +50,7 @@ def api_post(path: str, payload=None):
 
 
 # ---------------- UI helpers ----------------
-def render_status_badge(status: str):
+def render_status(status: str):
     cls = {
         "PENDING": "status status-pending",
         "AI_PROPOSED": "status status-ai",
@@ -87,12 +97,12 @@ for r in rows:
             "Gouvernorat": req.get("governorate", ""),
             "Activité": req.get("activity_type", ""),
             "Actifs (TND)": req.get("assets_value_tnd", 0),
+            "Revenu/mois (TND)": req.get("revenue_monthly_tnd", 0),
         }
     )
 
 df = pd.DataFrame(table)
 
-st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Mes demandes")
 
 if df.empty:
@@ -107,13 +117,12 @@ else:
     detail = api_get(f"/requests/{selected_id}")
     status = detail.get("status", "PENDING")
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Actions sur la demande")
 
     c1, c2, c3 = st.columns([2, 2, 4])
     with c1:
         st.write("Statut :")
-        render_status_badge(status)
+        render_status(status)
 
     with c2:
         if st.button("Visualiser", use_container_width=True):
@@ -157,16 +166,19 @@ if new_req:
 
         with right:
             assets_value_tnd = st.number_input("Valeur des actifs (TND)", 0.0, 500000.0, 25000.0, 500.0)
-            revenue_bucket = st.selectbox(
-                "Niveau de revenu",
-                [r[0] for r in REVENUE_BUCKETS],
-                format_func=lambda x: dict(REVENUE_BUCKETS).get(x, x),
+            revenue_monthly_tnd = st.number_input(
+                "Revenu mensuel estimé (TND)",
+                min_value=0.0,
+                max_value=500000.0,
+                value=6000.0,
+                step=100.0,
             )
+
             budget_constraint_tnd = st.slider("Budget annuel maximum (TND)", 100.0, 20000.0, 1200.0, 50.0)
 
         st.divider()
         st.subheader("Sécurité")
-        s1, s2, s3, s4, s5 = st.columns(5)
+        s1, s2, s3, s4 = st.columns(4)
         with s1:
             has_alarm = st.checkbox("Alarme")
         with s2:
@@ -174,8 +186,6 @@ if new_req:
         with s3:
             has_extinguisher = st.checkbox("Extincteur", value=True)
         with s4:
-            has_guard = st.checkbox("Agent de sécurité")
-        with s5:
             open_at_night = st.checkbox("Ouvert la nuit")
 
         payload = {
@@ -184,12 +194,11 @@ if new_req:
             "shop_area_m2": float(shop_area_m2),
             "years_active": int(years_active),
             "assets_value_tnd": float(assets_value_tnd),
-            "revenue_bucket": revenue_bucket,
+            "revenue_monthly_tnd": float(revenue_monthly_tnd),
             "security": {
                 "has_alarm": bool(has_alarm),
                 "has_camera": bool(has_camera),
                 "has_extinguisher": bool(has_extinguisher),
-                "has_guard": bool(has_guard),
             },
             "open_at_night": bool(open_at_night),
             "budget_constraint_tnd": float(budget_constraint_tnd),
@@ -213,7 +222,7 @@ if st.session_state.get("assure_view_request_id"):
 
     @st.dialog("Détails de la demande (lecture seule)")
     def view_request_dialog():
-        render_status_badge(detail.get("status", ""))
+        render_status(detail.get("status", ""))
         st.divider()
         st.json(detail.get("request", {}))
         if detail.get("notes"):

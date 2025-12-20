@@ -33,8 +33,10 @@ TEMPLATES = {
     "T2_EXTENDED": {"name": "Extended Multi-Risk", "coverages": ["incendie_etendu", "vol_etendu", "degats_eaux", "perte_exploitation"]},
 }
 
+
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
+
 
 def compute_risk_hint(area_m2, years_active, assets_tnd, revenue_bucket, security_score):
     r_map = {"low": 1.2, "medium": 2.2, "high": 3.2}
@@ -45,6 +47,7 @@ def compute_risk_hint(area_m2, years_active, assets_tnd, revenue_bucket, securit
     score += 0.8 if years_active < 1 else 0.0
     score -= 0.6 * security_score
     return clamp(score, 0.0, 10.0)
+
 
 def build_mock_quote(profile):
     risk = profile["risk_hint"]
@@ -84,6 +87,7 @@ def build_mock_quote(profile):
         }
     }
 
+
 # ------------------ UI ------------------
 st.title("🛡️ سالمة")
 st.caption("Frontend only (mock) — Micro-assurance inclusive pour petits commerçants (Tunisie)")
@@ -116,7 +120,8 @@ with left:
         with c2:
             years_active = st.number_input("Années d’activité", min_value=0, max_value=60, value=3, step=1)
 
-        assets_value_tnd = st.number_input("Valeur des actifs (TND)", min_value=0.0, max_value=500000.0, value=25000.0, step=500.0)
+        assets_value_tnd = st.number_input("Valeur des actifs (TND)", min_value=0.0,
+                                           max_value=500000.0, value=25000.0, step=500.0)
 
         revenue_bucket = st.selectbox(
             "Bucket de revenu",
@@ -124,23 +129,22 @@ with left:
             format_func=lambda x: dict(REVENUE_BUCKETS).get(x, x),
         )
 
-        budget_constraint_tnd = st.slider("Budget annuel max (TND)", min_value=100.0, max_value=20000.0, value=1200.0, step=50.0)
+        budget_constraint_tnd = st.slider("Budget annuel max (TND)", min_value=100.0,
+                                          max_value=20000.0, value=1200.0, step=50.0)
 
         st.markdown("### 🔐 Sécurité")
-        s1, s2, s3, s4 = st.columns(4)
+        s1, s2, s3, = st.columns(3)
         with s1:
             has_alarm = st.checkbox("Alarme", value=False)
         with s2:
             has_camera = st.checkbox("Caméras", value=False)
         with s3:
             has_extinguisher = st.checkbox("Extincteur", value=True)
-        with s4:
-            has_guard = st.checkbox("Agent", value=False)
 
         submitted = st.form_submit_button("Générer devis (mock)")
 
     if submitted:
-        security_score = int(has_alarm) + int(has_camera) + int(has_extinguisher) + int(has_guard)
+        security_score = int(has_alarm) + int(has_camera) + int(has_extinguisher)
         risk_hint = compute_risk_hint(shop_area_m2, years_active, assets_value_tnd, revenue_bucket, security_score)
 
         profile = {
@@ -155,7 +159,6 @@ with left:
                 "has_alarm": bool(has_alarm),
                 "has_camera": bool(has_camera),
                 "has_extinguisher": bool(has_extinguisher),
-                "has_guard": bool(has_guard),
             },
             "security_score": security_score,
             "risk_hint": float(risk_hint),

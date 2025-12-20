@@ -39,8 +39,6 @@ Thumbs.db
 # =========================
 # Data (keep folders, ignore contents)
 # =========================
-data/raw/*
-data/processed/*
 data/external/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep

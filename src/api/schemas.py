@@ -8,7 +8,6 @@ class SecurityFeatures(BaseModel):
     has_alarm: bool = False
     has_camera: bool = False
     has_extinguisher: bool = False
-    has_guard: bool = False
 
 
 class QuoteRequest(BaseModel):
@@ -17,7 +16,7 @@ class QuoteRequest(BaseModel):
     shop_area_m2: float = Field(ge=0)
     years_active: int = Field(ge=0)
     assets_value_tnd: float = Field(ge=0)
-    revenue_bucket: str  # low/medium/high
+    revenue_monthly_tnd: float = Field(ge=0)
     security: SecurityFeatures = SecurityFeatures()
     open_at_night: bool = False
     budget_constraint_tnd: float = Field(ge=0)
