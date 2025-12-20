@@ -14,7 +14,8 @@ class Offer:
     plafond_tnd: float
     franchise_tnd: float
     prime_annuelle_tnd: float
-    breakdown: Dict
+    breakdown: Dict[str, float]
+
     decision_reasons: List[str]
     flags: Dict
 
@@ -69,7 +70,7 @@ def compute_premium(profile: Dict, t: ProductTemplate, risk: Dict, plafond: floa
     base_expected_loss = p_claim * expected_cost
 
     # deductible reduces expected payout (simple proxy)
-    deductible_factor = 1.0 / (1.0 + (franchise / 2000.0))  # higher franchise => smaller factor
+    deductible_factor = 1.0 / (1.0 + (franchise / 2000.0))
     # higher limit increases expected payout slightly
     limit_factor = 1.0 + (plafond - t.plafond_base_tnd) / max(t.plafond_base_tnd, 1.0) * 0.10
     limit_factor = max(0.9, min(1.2, limit_factor))
@@ -93,13 +94,7 @@ def compute_premium(profile: Dict, t: ProductTemplate, risk: Dict, plafond: floa
     return {"premium": float(premium), "breakdown": breakdown}
 
 
-def apply_budget_constraint(
-    profile: Dict,
-    t: ProductTemplate,
-    risk: Dict,
-    plafond: float,
-    franchise: float
-) -> Dict:
+def apply_budget_constraint(profile: Dict, t: ProductTemplate, risk: Dict, plafond: float, franchise: float) -> Dict:
     """
     If budget_constraint_tnd exists and premium > budget:
     deterministically increase deductible + lower limit within allowed range.

@@ -13,6 +13,9 @@ from src.pricing.rules import select_template
 from src.pricing.engine import build_offer
 from src.models.segmentation_runtime import predict_cluster_id, cluster_to_template_hint
 
+# ✅ Keep DeepONet uncertainty only (no frequency duplication)
+from src.models.uncertainty_service import UncertaintyService
+
 
 def revenue_to_bucket(revenue_monthly_tnd: float) -> str:
     """
@@ -35,14 +38,13 @@ def _request_to_dict(req: QuoteRequest) -> Dict[str, Any]:
         return req.model_dump()
     if hasattr(req, "dict"):
         return req.dict()
-    # last resort
     return dict(req)  # type: ignore
 
 
 def compute_quote(req: QuoteRequest) -> QuoteResponse:
     payload = _request_to_dict(req)
 
-    # Build profile (X)
+    # Build profile (X) — keep your dataset schema
     profile: Dict[str, Any] = {
         "IDpol": payload.get("IDpol"),
         "governorate": payload.get("governorate"),
@@ -61,43 +63,60 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
         "budget_constraint_tnd": payload.get("budget_constraint_tnd"),
     }
 
-    # If revenue_bucket missing, infer it deterministically
+    # If revenue_bucket missing, infer deterministically
     if not profile.get("revenue_bucket"):
         profile["revenue_bucket"] = revenue_to_bucket(float(profile.get("revenue_monthly_tnd") or 0.0))
 
-    # === ML outputs are inputs to pricing but do not set price directly ===
-    # In your project, Model2/3/4 will fill these.
-    # For now keep safe defaults if not provided by upstream pipeline.
+    # ======================
+    # Risk inputs (Models)
+    # ======================
+    # Model2 (frequency) & Model3 (severity): use values if provided by upstream pipeline,
+    # otherwise keep placeholders (temporary).
     risk: Dict[str, Any] = {
-        "p_claim": payload.get("p_claim", 0.10),  # placeholder if not computed yet
+        "p_claim": payload.get("p_claim", 0.10),                # placeholder if not computed yet
         "expected_cost": payload.get("expected_cost", 3000.0),  # placeholder if not computed yet
-        "uncertainty_score": payload.get("uncertainty_score", 0.30),  # placeholder
     }
 
-    # === Segmentation integration ===
-    # predict cluster_id from profile X
+    # Model4 (DeepONet) — uncertainty only (never sets prices)
+    unc = UncertaintyService().predict(profile)
+    risk["uncertainty_score"] = float(unc.uncertainty_score)
+    risk["uncertainty_band"] = getattr(unc, "uncertainty_band", None)
+
+    # ======================
+    # Segmentation (Model 1)
+    # ======================
     cluster_id = predict_cluster_id(profile)
     risk["cluster_id"] = cluster_id
 
-    # convert cluster recommendation to pricing template id as a deterministic hint
     hint_tid = cluster_to_template_hint(cluster_id)
     if hint_tid:
         risk["cluster_hint_template_id"] = hint_tid
 
-    # Select product deterministically (rules + optional cluster hint)
+    # ======================
+    # Product selection (rules)
+    # ======================
     decision = select_template(profile, risk)
 
-    # Price deterministically (engine)
+    # ======================
+    # Pricing (deterministic)
+    # ======================
+    # IMPORTANT: keep your engine signature (profile, risk, decision)
     priced_offer = build_offer(profile, risk, decision)
 
-    # Build API decision
+    # ======================
+    # API response
+    # ======================
+    reasons_extra = [
+        f"derived_revenue_bucket:{profile['revenue_bucket']}",
+        f"segmentation_cluster_id:{cluster_id}",
+        f"cluster_hint:{hint_tid}" if hint_tid else "cluster_hint:none",
+        "uncertainty_model:deeponet_v1",
+        f"uncertainty_band:{risk.get('uncertainty_band')}",
+    ]
+
     api_decision = ApiDecision(
         template_id=decision.template_id,
-        reasons=decision.reasons + [
-            f"derived_revenue_bucket:{profile['revenue_bucket']}",
-            f"segmentation_cluster_id:{cluster_id}",
-            f"cluster_hint:{hint_tid}" if hint_tid else "cluster_hint:none",
-        ],
+        reasons=decision.reasons + reasons_extra,
     )
 
     api_offer = ApiOffer(
@@ -108,6 +127,11 @@ def compute_quote(req: QuoteRequest) -> QuoteResponse:
         franchise_tnd=priced_offer.franchise_tnd,
         prime_annuelle_tnd=priced_offer.prime_annuelle_tnd,
         breakdown=priced_offer.breakdown,
+        explain={
+            "uncertainty_model": "deeponet_v1",
+            "uncertainty_band": risk.get("uncertainty_band"),
+            "uncertainty_score": risk.get("uncertainty_score"),
+        },
     )
 
     return QuoteResponse(decision=api_decision, offer=api_offer)
