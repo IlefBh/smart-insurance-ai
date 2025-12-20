@@ -1,3 +1,4 @@
+# src/pricing/service.py
 from __future__ import annotations
 
 from typing import Dict, Any
@@ -10,127 +11,93 @@ from src.api.schemas import (
 )
 from src.pricing.rules import select_template
 from src.pricing.engine import build_offer
+from src.models.segmentation_runtime import predict_cluster_id, cluster_to_template_hint
 
 
 def revenue_to_bucket(revenue_monthly_tnd: float) -> str:
     """
-    Simple, explainable thresholds (TND / month).
-    Adjust later if needed.
+    Deterministic bucketing (proxy). Adjust thresholds if needed.
     """
-    r = float(revenue_monthly_tnd or 0.0)
+    try:
+        r = float(revenue_monthly_tnd or 0.0)
+    except Exception:
+        r = 0.0
+
     if r < 3000:
         return "low"
-    if r <= 10000:
+    if r < 8000:
         return "medium"
     return "high"
 
 
-def _normalize_profile(req: QuoteRequest) -> Dict[str, Any]:
-    """
-    API schema -> pricing schema expected by rules/engine.
-    This is the only translation layer, so schema changes remain localized.
-    """
-    r = req.model_dump()
-    sec = r.get("security") or {}
-
-    # NEW: derive bucket internally from revenue_monthly_tnd
-    revenue_monthly_tnd = float(r.get("revenue_monthly_tnd") or 0.0)
-    derived_bucket = revenue_to_bucket(revenue_monthly_tnd)
-
-    profile: Dict[str, Any] = {
-        "governorate": r.get("governorate"),
-        "activity_type": r.get("activity_type"),
-        "shop_area_m2": r.get("shop_area_m2"),
-        "years_active": r.get("years_active"),
-        "assets_value_tnd": r.get("assets_value_tnd"),
-
-        # keep both: numeric for future ML, bucket for current rules/engine
-        "revenue_monthly_tnd": revenue_monthly_tnd,
-        "revenue_bucket": derived_bucket,
-
-        "open_at_night": bool(r.get("open_at_night", False)),
-
-        # expected by pricing/engine.py
-        "security_alarm": bool(sec.get("has_alarm", False)),
-        "security_camera": bool(sec.get("has_camera", False)),
-        "fire_extinguisher": bool(sec.get("has_extinguisher", False)),
-
-        # engine expects budget_max_tnd (spec). API currently uses budget_constraint_tnd.
-        "budget_max_tnd": r.get("budget_constraint_tnd"),
-    }
-
-    return profile
-
-
-def _stub_risk_estimates(profile: Dict[str, Any]) -> Dict[str, float]:
-    """
-    Deterministic, explainable risk proxies until models are plugged in.
-    Keys expected by rules/engine:
-      - p_claim
-      - expected_cost
-      - uncertainty_score
-    """
-    assets = float(profile.get("assets_value_tnd") or 0.0)
-    open_at_night = bool(profile.get("open_at_night"))
-    alarm = bool(profile.get("security_alarm"))
-    camera = bool(profile.get("security_camera"))
-    years_active = int(profile.get("years_active") or 0)
-
-    # Frequency proxy
-    p_claim = 0.06
-    if open_at_night:
-        p_claim += 0.08
-    if assets > 60000:
-        p_claim += 0.05
-    if not alarm:
-        p_claim += 0.04
-    if camera:
-        p_claim -= 0.01
-    p_claim = max(0.0, min(0.60, p_claim))
-
-    # Severity proxy (TND)
-    if assets > 80000:
-        expected_cost = 9000.0
-    elif assets > 30000:
-        expected_cost = 6000.0
-    else:
-        expected_cost = 4500.0
-
-    # Uncertainty proxy
-    uncertainty_score = 0.30
-    if years_active < 1:
-        uncertainty_score += 0.15
-
-    # still uses the derived bucket (works as before)
-    if profile.get("revenue_bucket") == "low":
-        uncertainty_score += 0.05
-
-    if open_at_night and not alarm:
-        uncertainty_score += 0.20
-    uncertainty_score = max(0.0, min(1.0, uncertainty_score))
-
-    return {
-        "p_claim": float(p_claim),
-        "expected_cost": float(expected_cost),
-        "uncertainty_score": float(uncertainty_score),
-    }
+def _request_to_dict(req: QuoteRequest) -> Dict[str, Any]:
+    if hasattr(req, "model_dump"):
+        return req.model_dump()
+    if hasattr(req, "dict"):
+        return req.dict()
+    # last resort
+    return dict(req)  # type: ignore
 
 
 def compute_quote(req: QuoteRequest) -> QuoteResponse:
-    profile = _normalize_profile(req)
+    payload = _request_to_dict(req)
 
-    # Later: replace by models outputs
-    risk = _stub_risk_estimates(profile)
+    # Build profile (X)
+    profile: Dict[str, Any] = {
+        "IDpol": payload.get("IDpol"),
+        "governorate": payload.get("governorate"),
+        "density_per_km2": payload.get("density_per_km2"),
+        "poi_per_km2": payload.get("poi_per_km2"),
+        "years_active": payload.get("years_active"),
+        "activity_type": payload.get("activity_type"),
+        "shop_area_m2": payload.get("shop_area_m2"),
+        "assets_value_tnd": payload.get("assets_value_tnd"),
+        "revenue_monthly_tnd": payload.get("revenue_monthly_tnd"),
+        "revenue_bucket": payload.get("revenue_bucket"),
+        "open_at_night": payload.get("open_at_night", False),
+        "security_alarm": payload.get("security_alarm", False),
+        "security_camera": payload.get("security_camera", False),
+        "fire_extinguisher": payload.get("fire_extinguisher", False),
+        "budget_constraint_tnd": payload.get("budget_constraint_tnd"),
+    }
 
+    # If revenue_bucket missing, infer it deterministically
+    if not profile.get("revenue_bucket"):
+        profile["revenue_bucket"] = revenue_to_bucket(float(profile.get("revenue_monthly_tnd") or 0.0))
+
+    # === ML outputs are inputs to pricing but do not set price directly ===
+    # In your project, Model2/3/4 will fill these.
+    # For now keep safe defaults if not provided by upstream pipeline.
+    risk: Dict[str, Any] = {
+        "p_claim": payload.get("p_claim", 0.10),  # placeholder if not computed yet
+        "expected_cost": payload.get("expected_cost", 3000.0),  # placeholder if not computed yet
+        "uncertainty_score": payload.get("uncertainty_score", 0.30),  # placeholder
+    }
+
+    # === Segmentation integration ===
+    # predict cluster_id from profile X
+    cluster_id = predict_cluster_id(profile)
+    risk["cluster_id"] = cluster_id
+
+    # convert cluster recommendation to pricing template id as a deterministic hint
+    hint_tid = cluster_to_template_hint(cluster_id)
+    if hint_tid:
+        risk["cluster_hint_template_id"] = hint_tid
+
+    # Select product deterministically (rules + optional cluster hint)
     decision = select_template(profile, risk)
-    risk["template_id"] = decision.template_id  # engine expects template_id in risk dict
 
-    priced_offer = build_offer(profile, risk, decision.reasons)
+    # Price deterministically (engine)
+    priced_offer = build_offer(profile, risk, decision)
 
+    # Build API decision
     api_decision = ApiDecision(
         template_id=decision.template_id,
-        candidates=decision.candidates,
-        reasons=decision.reasons + [f"derived_revenue_bucket:{profile['revenue_bucket']}"],
+        reasons=decision.reasons + [
+            f"derived_revenue_bucket:{profile['revenue_bucket']}",
+            f"segmentation_cluster_id:{cluster_id}",
+            f"cluster_hint:{hint_tid}" if hint_tid else "cluster_hint:none",
+        ],
     )
 
     api_offer = ApiOffer(
