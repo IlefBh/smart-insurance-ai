@@ -15,9 +15,9 @@ class Offer:
     franchise_tnd: float
     prime_annuelle_tnd: float
 
-    breakdown: Dict
+    bbreakdown: Dict[str, float]
     decision_reasons: List[str]
-    flags: Dict
+    flags: Dict[str, bool]
 
 
 def _clip(x: float, lo: float, hi: float) -> float:

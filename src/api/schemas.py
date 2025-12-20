@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 
 class SecurityFeatures(BaseModel):
@@ -41,3 +42,10 @@ class Offer(BaseModel):
 class QuoteResponse(BaseModel):
     decision: SelectionDecision
     offer: Offer
+
+
+class FinalizeRequest(BaseModel):
+    action: str  # ACCEPT / MODIFY / REJECT
+    final_offer: Optional[Dict[str, Any]] = None
+    processed_by: str = "demo_assureur"
+    notes: Optional[str] = None
