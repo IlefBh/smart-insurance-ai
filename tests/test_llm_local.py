@@ -1,177 +1,112 @@
 """
-Local test for LLM explanation layer.
-Tests the explainer with sample data (no API key needed for fallback mode).
+E2E local test for LLM explanation layer.
+- Runs the real pricing pipeline (compute_quote)
+- Feeds the real output to OfferExplainer
+- Works in fallback mode (no API key required)
 """
 
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+import os
 
-from llm import OfferExplainer, ExplanationOutput
+from src.api.schemas import QuoteRequest, SecurityFeatures
+from src.pricing.service import compute_quote
+from src.llm.explainer import OfferExplainer
 
 
-def test_explainer_with_fallback():
-    """Test explainer in fallback mode (no API key)."""
-    
-    # Sample offer from pricing engine
-    sample_offer = {
-        'template_id': 'T3_NIGHT',
-        'template_name': 'Night & Cash Risk',
-        'coverages': ['theft_extended', 'cash_on_premises', 'vandalism'],
-        'plafond_tnd': 36000.0,
-        'franchise_tnd': 2400,
-        'prime_annuelle_tnd': 638.93,
-        'breakdown': {
-            'expected_cost': 2500.0,
-            'expected_loss': 450.0,
-            'expense_margin': 0.45,
-            'feature_adjustment': 0.986,
-            'multiplier': 1.6,
-            'p_claim': 0.18,
-            'uncertainty_buffer': 0.15
-        },
-        'decision_reasons': ['rule_open_at_night', 'rule_high_frequency'],
-        'flags': {'high_risk': False, 'underwriting_review': False}
-    }
-    
-    sample_profile = {
-        'activity_type': 'Café',
-        'governorate': 'Tunis',
-        'shop_area_m2': 45,
-        'assets_value_tnd': 40000,
-        'open_at_night': True,
-        'security_alarm': False,
-        'security_camera': True,
-        'fire_extinguisher': True
-    }
-    
-    sample_ml = {
-        'segment_name': 'Cluster 2 - Risque Élevé',
-        'uncertainty_score': 'Élevé'
-    }
-    
-    print("\n" + "="*70)
-    print("🧪 TESTING LLM EXPLAINER - FALLBACK MODE (No API Key)")
-    print("="*70)
-    
-    explainer = OfferExplainer(api_key=None)
-    
-    result = explainer.generate_explanations(
-        offer=sample_offer,
-        client_profile=sample_profile,
-        ml_outputs=sample_ml
+def _build_client_profile_from_req(req: QuoteRequest) -> dict:
+    """
+    Build the client_profile dict expected by prompts.py.
+    We keep it simple and explicit to avoid hidden dependencies (_normalize_profile).
+    """
+    payload = req.model_dump() if hasattr(req, "model_dump") else dict(req)
+
+    # Extract nested security
+    sec = payload.get("security") or {}
+    # SecurityFeatures likely uses has_alarm/has_camera/has_extinguisher
+    security_alarm = bool(sec.get("has_alarm", False))
+    security_camera = bool(sec.get("has_camera", False))
+    fire_extinguisher = bool(sec.get("has_extinguisher", False))
+
+    # Ensure keys used in prompts are present
+    payload["security_alarm"] = security_alarm
+    payload["security_camera"] = security_camera
+    payload["fire_extinguisher"] = fire_extinguisher
+
+    return payload
+
+
+def main():
+    # Same request as your models test
+    req = QuoteRequest(
+        governorate="Tunis",
+        activity_type="grocery",
+        shop_area_m2=40,
+        years_active=5,
+        assets_value_tnd=60000,
+        revenue_monthly_tnd=8000,
+        open_at_night=False,
+        security=SecurityFeatures(has_alarm=True, has_camera=True, has_extinguisher=True),
+        budget_constraint_tnd=300,
     )
-    
-    assert isinstance(result, ExplanationOutput)
-    assert len(result.customer_explanation) > 0
-    assert len(result.insurer_explanation) > 0
-    assert len(result.recommendations) > 0
-    assert result.disclaimer is not None
-    
-    print("\n✅ All assertions passed\n")
-    print("📋 CUSTOMER EXPLANATION:")
+
+    resp = compute_quote(req)
+
+    # Convert offer to dict
+    offer_dict = resp.offer.model_dump() if hasattr(resp.offer, "model_dump") else dict(resp.offer)
+
+    # Attach decision reasons under the key expected by your explainer/prompts
+    decision_dict = resp.decision.model_dump() if hasattr(resp.decision, "model_dump") else dict(resp.decision)
+    offer_dict["decision_reasons"] = decision_dict.get("reasons", [])
+
+    # Ensure flags exist (even if empty)
+    if "flags" not in offer_dict:
+        offer_dict["flags"] = {}
+
+    # Client profile (what the prompt expects)
+    client_profile = _build_client_profile_from_req(req)
+
+    # ML outputs (keep minimal, no invention)
+    breakdown = offer_dict.get("breakdown", {}) or {}
+    ml_outputs = {
+        "segment_name": "N/A",
+        "uncertainty_score": breakdown.get("uncertainty_score", None),
+    }
+
+    api_key = os.getenv("GOOGLE_API_KEY")
+
+    # If key exists, use real API; otherwise fallback.
+    explainer = OfferExplainer(api_key=api_key)
+
+    out = explainer.generate_explanations(
+        offer=offer_dict,
+        client_profile=client_profile,
+        ml_outputs=ml_outputs,
+    )
+
+    print("\n" + "=" * 70)
+    print("✅ LLM EXPLAINER E2E TEST")
+    print("=" * 70)
+    print("\n📋 CUSTOMER EXPLANATION:")
     print("-" * 70)
-    print(result.customer_explanation)
-    
+    print(out.customer_explanation)
+
     print("\n🔍 INSURER EXPLANATION:")
     print("-" * 70)
-    print(result.insurer_explanation)
-    
+    print(out.insurer_explanation)
+
     print("\n💡 RECOMMENDATIONS:")
     print("-" * 70)
-    print(result.recommendations)
-    
+    print(out.recommendations)
+
     print("\n⚠️ DISCLAIMER:")
     print("-" * 70)
-    print(result.disclaimer)
-    
-    print("\n" + "="*70)
-    print("✅ TEST COMPLETED SUCCESSFULLY")
-    print("="*70 + "\n")
+    print(out.disclaimer)
 
-
-def test_explainer_with_api_key():
-    """Test with real Gemini API (requires GOOGLE_API_KEY env var)."""
-    
-    import os
-    
-    api_key = os.getenv('GOOGLE_API_KEY')
-    
-    if not api_key:
-        print("\n⚠️ GOOGLE_API_KEY not set - skipping real API test")
-        print("To test with real LLM, set: export GOOGLE_API_KEY='your-key'\n")
-        return
-    
-    print("\n" + "="*70)
-    print("🧪 TESTING LLM EXPLAINER - REAL API MODE")
-    print("="*70)
-    
-    sample_offer = {
-        'template_id': 'T2_PLUS',
-        'template_name': 'Commerce Plus',
-        'coverages': ['fire', 'theft_extended', 'water_damage', 'equipment_breakdown'],
-        'plafond_tnd': 80000.0,
-        'franchise_tnd': 1500,
-        'prime_annuelle_tnd': 1245.80,
-        'breakdown': {
-            'expected_cost': 3500.0,
-            'expected_loss': 525.0,
-            'expense_margin': 0.40,
-            'feature_adjustment': 0.95,
-            'multiplier': 1.45,
-            'p_claim': 0.15,
-            'uncertainty_buffer': 0.12
-        },
-        'decision_reasons': ['rule_high_assets', 'rule_pharmacy'],
-        'flags': {'high_risk': False, 'underwriting_review': False}
-    }
-    
-    sample_profile = {
-        'activity_type': 'Pharmacie',
-        'governorate': 'Sfax',
-        'shop_area_m2': 65,
-        'assets_value_tnd': 90000,
-        'open_at_night': False,
-        'security_alarm': True,
-        'security_camera': True,
-        'fire_extinguisher': True
-    }
-    
-    sample_ml = {
-        'segment_name': 'Cluster 1 - Risque Modéré',
-        'uncertainty_score': 'Faible'
-    }
-    
-    explainer = OfferExplainer(api_key=api_key, model="gemini-2.5-flash-lite")
-    
-    result = explainer.generate_explanations(
-        offer=sample_offer,
-        client_profile=sample_profile,
-        ml_outputs=sample_ml
-    )
-    
-    print("\n📋 CUSTOMER EXPLANATION (Generated by LLM):")
-    print("-" * 70)
-    print(result.customer_explanation)
-    
-    print("\n🔍 INSURER EXPLANATION (Generated by LLM):")
-    print("-" * 70)
-    print(result.insurer_explanation)
-    
-    print("\n💡 RECOMMENDATIONS (Generated by LLM):")
-    print("-" * 70)
-    print(result.recommendations)
-    
-    print("\n" + "="*70)
-    print("✅ REAL API TEST COMPLETED")
-    print("="*70 + "\n")
+    print("\n" + "=" * 70)
+    print("✅ TEST COMPLETED")
+    print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":
-    # Test 1: Fallback mode (always works)
-    test_explainer_with_fallback()
-    
-    # Test 2: Real API (requires env var)
-    test_explainer_with_api_key()
+    main()

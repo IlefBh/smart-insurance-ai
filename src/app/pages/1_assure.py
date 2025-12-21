@@ -11,10 +11,98 @@ import pandas as pd
 from dotenv import load_dotenv
 from src.common.ui import apply_branding, render_status
 
+from src.llm.explainer import OfferExplainer
 
 
 apply_branding(show_top_header=False)
 
+# ========== LLM + Explainability helpers (paste here) ==========
+
+def build_client_profile_from_request(req: dict) -> dict:
+    sec = req.get("security") or {}
+    out = dict(req)
+    out["security_alarm"] = bool(sec.get("has_alarm", False))
+    out["security_camera"] = bool(sec.get("has_camera", False))
+    out["fire_extinguisher"] = bool(sec.get("has_extinguisher", False))
+    out["open_at_night"] = bool(out.get("open_at_night", False))
+    return out
+
+
+def get_decision_reasons(detail: dict) -> list:
+    aiq = detail.get("ai_quote") or {}
+    decision = aiq.get("decision") or {}
+    reasons = decision.get("reasons") or []
+    return reasons if isinstance(reasons, list) else []
+
+
+def show_offer_badges(breakdown: dict):
+    cols = st.columns(3)
+
+    if float(breakdown.get("budget_unmet", 0.0)) == 1.0:
+        cols[0].warning("Budget non atteint")
+    else:
+        cols[0].info("Budget OK")
+
+    if float(breakdown.get("min_premium_applied", 0.0)) == 1.0:
+        cols[1].warning("Prime minimale appliquée")
+    else:
+        cols[1].info("Prime sans plancher")
+
+    if float(breakdown.get("uncertainty_fallback_used", 0.0)) == 1.0:
+        cols[2].warning("Incertitude: mode fallback")
+    else:
+        cols[2].info("Incertitude: modèle disponible")
+
+
+def render_explanations_block(
+    offer: dict,
+    client_profile: dict,
+    decision_reasons: list,
+    audience: str,  # "customer" ou "insurer"
+):
+    """
+    audience="customer" -> montre Client + Reco
+    audience="insurer"  -> montre Assureur + Reco
+    """
+    offer_for_llm = dict(offer)
+    offer_for_llm["decision_reasons"] = decision_reasons
+
+    api_key = os.getenv("GOOGLE_API_KEY")  # optionnel
+    explainer = OfferExplainer(api_key=api_key)
+
+    breakdown = offer_for_llm.get("breakdown", {}) or {}
+    ml_outputs = {
+        "segment_name": "N/A",
+        "uncertainty_score": breakdown.get("uncertainty_score", None),
+    }
+
+    out = explainer.generate_explanations(
+        offer=offer_for_llm,
+        client_profile=client_profile,
+        ml_outputs=ml_outputs,
+    )
+
+    if audience == "customer":
+        t1, t2 = st.tabs(["🧾 Explication client", "💡 Recommandations"])
+        with t1:
+            st.write(out.customer_explanation)
+        with t2:
+            st.write(out.recommendations)
+
+    elif audience == "insurer":
+        t1, t2 = st.tabs(["🔍 Analyse assureur", "💡 Recommandations"])
+        with t1:
+            st.write(out.insurer_explanation)
+        with t2:
+            st.write(out.recommendations)
+
+    else:
+        # fallback safe
+        st.write(out.customer_explanation)
+        st.write(out.insurer_explanation)
+        st.write(out.recommendations)
+
+    st.caption(out.disclaimer)
 
 load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
@@ -257,6 +345,23 @@ if st.session_state.get("assure_view_offer_id"):
         c1.metric("Prime annuelle (TND)", f"{offer.get('prime_annuelle_tnd', 0):.2f}")
         c2.metric("Plafond (TND)", f"{offer.get('plafond_tnd', '-')}")
         c3.metric("Franchise (TND)", f"{offer.get('franchise_tnd', '-')}")
+                # ✅ Explainability badges + LLM explanations
+        req_obj = detail.get("request") or {}
+        client_profile = build_client_profile_from_request(req_obj)
+        decision_reasons = get_decision_reasons(detail)
+
+        breakdown = offer.get("breakdown", {}) or {}
+        show_offer_badges(breakdown)
+
+        st.divider()
+        st.subheader("Explications")
+        render_explanations_block(
+            offer=offer,
+            client_profile=client_profile,
+            decision_reasons=decision_reasons,
+            audience="customer",
+        )
+
 
         st.divider()
         st.subheader("Produit")

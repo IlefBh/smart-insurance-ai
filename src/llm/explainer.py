@@ -8,6 +8,7 @@ CRITICAL: LLM is NON-DECISIONAL. It only explains decisions made by rules + pric
 from typing import Dict, Any, Optional
 from google import genai
 from dataclasses import dataclass
+import os
 
 from .prompts import (
     SYSTEM_PROMPT,
@@ -295,9 +296,11 @@ def test_explainer_local():
     print("=" * 60)
     print("Testing LLM Explainer (Fallback Mode - No API Key)")
     print("=" * 60)
-    
+    print("ENV GOOGLE_API_KEY exists?", bool(os.getenv("GOOGLE_API_KEY")))
+    print("ENV GOOGLE_API_KEY prefix:", (os.getenv("GOOGLE_API_KEY") or "")[:6])
+
     # Test without API key (uses fallback)
-    explainer = OfferExplainer(api_key=None)
+    explainer = OfferExplainer(api_key=os.getenv("GOOGLE_API_KEY"))
     
     explanations = explainer.generate_explanations(
         offer=sample_offer,

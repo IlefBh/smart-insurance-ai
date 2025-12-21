@@ -1,0 +1,333 @@
+{
+  "chosen_k": 3,
+  "silhouette_scores": {
+    "2": 0.19331478545286548,
+    "3": 0.22600532259429698,
+    "4": 0.16601485634149454,
+    "5": 0.17706421655564214,
+    "6": 0.1719967583375536,
+    "7": 0.15831354619651555,
+    "8": 0.15934991273069557,
+    "9": 0.15864312353312937,
+    "10": 0.14015955011314396
+  },
+  "global_medians": {
+    "assets_value_tnd": 47859.5911517651,
+    "years_active": 0.63
+  },
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "size": 18653,
+      "share": 0.3526887006504311,
+      "numeric_summary": {
+        "density_per_km2": {
+          "mean": 209.39069336887306,
+          "median": 106.50131926121372
+        },
+        "poi_per_km2": {
+          "mean": 0.9501893971969837,
+          "median": 0.5306799854577948
+        },
+        "years_active": {
+          "mean": 0.78781053985954,
+          "median": 0.95
+        },
+        "shop_area_m2": {
+          "mean": 89.3385095213028,
+          "median": 84.45406226784554
+        },
+        "assets_value_tnd": {
+          "mean": 82035.58781623562,
+          "median": 72721.23812913548
+        },
+        "revenue_monthly_tnd": {
+          "mean": 9800.531487852759,
+          "median": 8479.651685670193
+        }
+      },
+      "categorical_summary": {
+        "governorate": [
+          {
+            "value": "Ben Arous",
+            "share": 0.32600654050286815
+          },
+          {
+            "value": "Manouba",
+            "share": 0.26649868653835845
+          },
+          {
+            "value": "Sousse",
+            "share": 0.2343322789899748
+          }
+        ],
+        "activity_type": [
+          {
+            "value": "grocery",
+            "share": 0.5336407012276846
+          },
+          {
+            "value": "clothing",
+            "share": 0.33983809574867313
+          },
+          {
+            "value": "pharmacy",
+            "share": 0.08347182758805555
+          }
+        ],
+        "revenue_bucket": [
+          {
+            "value": "high",
+            "share": 0.7799281616898086
+          },
+          {
+            "value": "medium",
+            "share": 0.2184099072535249
+          },
+          {
+            "value": "low",
+            "share": 0.0016619310566664879
+          }
+        ]
+      },
+      "security_rates": {
+        "open_at_night": 0.2770599903500777,
+        "security_alarm": 0.9324505441483943,
+        "security_camera": 0.8540717310888329,
+        "fire_extinguisher": 0.4649118104326382
+      },
+      "top_drivers": [
+        {
+          "feature": "revenue_monthly_tnd",
+          "relative_diff": 0.5389374647843352
+        },
+        {
+          "feature": "assets_value_tnd",
+          "relative_diff": 0.501032381147252
+        },
+        {
+          "feature": "density_per_km2",
+          "relative_diff": -0.39645173349951224
+        },
+        {
+          "feature": "poi_per_km2",
+          "relative_diff": -0.3393643297582637
+        },
+        {
+          "feature": "years_active",
+          "relative_diff": 0.29202525236034554
+        }
+      ],
+      "label": "Forte valeur exposée",
+      "recommended_product": "Commerce Plus",
+      "underwriting_flag": false,
+      "risk_profile": "medium"
+    },
+    {
+      "cluster_id": 1,
+      "size": 26878,
+      "share": 0.5082060202692482,
+      "numeric_summary": {
+        "density_per_km2": {
+          "mean": 194.88379581853974,
+          "median": 106.50131926121372
+        },
+        "poi_per_km2": {
+          "mean": 0.891383629272317,
+          "median": 0.5306799854577948
+        },
+        "years_active": {
+          "mean": 0.4748820596770593,
+          "median": 0.43
+        },
+        "shop_area_m2": {
+          "mean": 56.64622024353293,
+          "median": 55.421018535133335
+        },
+        "assets_value_tnd": {
+          "mean": 35941.16219478265,
+          "median": 36309.118025407326
+        },
+        "revenue_monthly_tnd": {
+          "mean": 4120.042277096384,
+          "median": 4100.3455858469515
+        }
+      },
+      "categorical_summary": {
+        "governorate": [
+          {
+            "value": "Ben Arous",
+            "share": 0.31631817843589555
+          },
+          {
+            "value": "Manouba",
+            "share": 0.27472282163851475
+          },
+          {
+            "value": "Sousse",
+            "share": 0.2610313267356202
+          }
+        ],
+        "activity_type": [
+          {
+            "value": "grocery",
+            "share": 0.49174045687923207
+          },
+          {
+            "value": "cafe",
+            "share": 0.34626832353597736
+          },
+          {
+            "value": "kiosk",
+            "share": 0.13334325470645136
+          }
+        ],
+        "revenue_bucket": [
+          {
+            "value": "low",
+            "share": 0.5610908549743284
+          },
+          {
+            "value": "medium",
+            "share": 0.4064290497804896
+          },
+          {
+            "value": "high",
+            "share": 0.03248009524518193
+          }
+        ]
+      },
+      "security_rates": {
+        "open_at_night": 0.5202396011608007,
+        "security_alarm": 0.4053501004539028,
+        "security_camera": 0.20455391026118014,
+        "fire_extinguisher": 0.39102611801473325
+      },
+      "top_drivers": [
+        {
+          "feature": "density_per_km2",
+          "relative_diff": -0.43826645165207506
+        },
+        {
+          "feature": "poi_per_km2",
+          "relative_diff": -0.38025001753367743
+        },
+        {
+          "feature": "revenue_monthly_tnd",
+          "relative_diff": -0.35304657451795624
+        },
+        {
+          "feature": "assets_value_tnd",
+          "relative_diff": -0.3423726250109149
+        },
+        {
+          "feature": "years_active",
+          "relative_diff": -0.22118314599669578
+        }
+      ],
+      "label": "Commerce standard",
+      "recommended_product": "Commerce Essentiel",
+      "underwriting_flag": false,
+      "risk_profile": "low-medium"
+    },
+    {
+      "cluster_id": 2,
+      "size": 7357,
+      "share": 0.13910527908032067,
+      "numeric_summary": {
+        "density_per_km2": {
+          "mean": 1251.1527777777774,
+          "median": 1251.1527777777778
+        },
+        "poi_per_km2": {
+          "mean": 4.673931549197589,
+          "median": 4.673931549197588
+        },
+        "years_active": {
+          "mean": 0.6510072040233791,
+          "median": 0.74
+        },
+        "shop_area_m2": {
+          "mean": 69.0944980239758,
+          "median": 66.1069586146051
+        },
+        "assets_value_tnd": {
+          "mean": 53587.01734334717,
+          "median": 49055.40406226611
+        },
+        "revenue_monthly_tnd": {
+          "mean": 5880.498545264003,
+          "median": 5490.776174651273
+        }
+      },
+      "categorical_summary": {
+        "governorate": [
+          {
+            "value": "Tunis",
+            "share": 1.0
+          }
+        ],
+        "activity_type": [
+          {
+            "value": "grocery",
+            "share": 0.5394862036156042
+          },
+          {
+            "value": "cafe",
+            "share": 0.2214217751801006
+          },
+          {
+            "value": "clothing",
+            "share": 0.15577001495174664
+          }
+        ],
+        "revenue_bucket": [
+          {
+            "value": "medium",
+            "share": 0.3577545195052331
+          },
+          {
+            "value": "low",
+            "share": 0.3421231480222917
+          },
+          {
+            "value": "high",
+            "share": 0.3001223324724752
+          }
+        ]
+      },
+      "security_rates": {
+        "open_at_night": 0.4209596302840832,
+        "security_alarm": 0.6497213538126954,
+        "security_camera": 0.4874269403289384,
+        "fire_extinguisher": 0.43074622808209867
+      },
+      "top_drivers": [
+        {
+          "feature": "density_per_km2",
+          "relative_diff": 2.6063259307422677
+        },
+        {
+          "feature": "poi_per_km2",
+          "relative_diff": 2.2496293073604834
+        },
+        {
+          "feature": "revenue_monthly_tnd",
+          "relative_diff": -0.07660931095943598
+        },
+        {
+          "feature": "years_active",
+          "relative_diff": 0.06766529370961741
+        },
+        {
+          "feature": "assets_value_tnd",
+          "relative_diff": -0.019500556000587203
+        }
+      ],
+      "label": "Commerce standard",
+      "recommended_product": "Commerce Essentiel",
+      "underwriting_flag": false,
+      "risk_profile": "low-medium"
+    }
+  ]
+}
